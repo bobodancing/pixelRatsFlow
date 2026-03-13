@@ -2,7 +2,7 @@
 
 > ⚠️ **Claude Code 必讀：這是最高優先級文件。所有指令以本檔為準。**
 > 當本檔內容與 Ch1–Ch4 衝突時，以本檔為準。
-> 版本：v1.0（2026/03/13 — 整合四章指令書 + PM 團隊 Review）
+> 版本：v1.1（2026/03/13 — 整合四章指令書 + PM 團隊 Review + 差異對齊）
 
 ---
 
@@ -44,9 +44,11 @@
 2. Flame 老鼠 8 狀態動畫 + 3 部位配件錨點系統
 3. Mood（0–100，離線底線 30）+ Trust（0–1000，永不衰減）完整計算
 4. Cheese 免費經濟 + Gacha（Trust 分池 + Mood luck 線性公式）
-5. 離線衰減、streak、每 15 秒 Firestore checkpoint、Firestore 安全規則
+5. 離線衰減、streak、每 30 秒 Firestore checkpoint、Firestore 安全規則
 6. i18n 雙語（繁體中文 + 英文）
 7. Firebase Auth（Google 登入）+ Remote Config
+
+8. 白噪音 + 互動音效（audioplayers，備選 Howler.js）
 
 ### Nice-to-Have（Sprint 4–6 再做）
 
@@ -120,7 +122,7 @@ lib/
 │   ├── streak_controller.dart       # 連續天數
 │   └── rat_animation_controller.dart # 老鼠動畫狀態機
 │
-├── models/              ← 資料模型（freezed 或 equatable）
+├── models/              ← 資料模型（freezed + json_serializable）
 │   ├── rat_model.dart
 │   ├── item_model.dart
 │   ├── session_model.dart
@@ -170,7 +172,7 @@ web/
 - `repositories/` 只負責與外部服務溝通（Firestore、Remote Config、Auth）
 - `controllers/` 只負責業務邏輯與狀態計算，透過 Repository 介面操作資料
 - `screens/` 和 `widgets/` 只負責讀取狀態與繪製 UI，**嚴禁在 UI 層寫業務邏輯**
-- `game/` 是 Flame 引擎專屬，透過 Controller 取得狀態來驅動動畫
+- `game/` 是 Flame 引擎專屬，透過 `flame_riverpod` 套件橋接 Controller 狀態來驅動動畫
 
 ### 4.3 Repository 介面模式
 
@@ -200,7 +202,8 @@ class MockFirestoreRepository implements FirestoreRepository { ... }
 ### 5.1 Grace Period（Web 版 visibilitychange）
 
 ```dart
-import 'dart:html' as html;
+// ⚠️ 使用 package:web，不使用已棄用的 dart:html
+import 'package:web/web.dart' as web;
 import 'dart:async';
 
 class TimerController {
@@ -209,16 +212,16 @@ class TimerController {
   final FirestoreRepository _repo;
 
   void init() {
-    html.document.onVisibilityChange.listen((event) {
-      if (html.document.hidden!) {
+    web.document.addEventListener('visibilitychange', (web.Event _) {
+      if (web.document.hidden) {
         _onPageHidden();
       } else {
         _onPageVisible();
       }
-    });
-    // 每 15 秒自動 checkpoint 到 Firestore（防瀏覽器殺進程）
+    }.toJS);
+    // 每 30 秒自動 checkpoint 到 Firestore（防瀏覽器殺進程）
     _checkpointTimer = Timer.periodic(
-      const Duration(seconds: 15),
+      const Duration(seconds: 30),
       (_) => _saveCheckpoint(),
     );
   }
@@ -226,12 +229,12 @@ class TimerController {
   void _onPageHidden() {
     _leaveTime = DateTime.now();
     // 立即寫入 localStorage 作為備份
-    html.window.localStorage['leave_time'] = _leaveTime!.toIso8601String();
+    web.window.localStorage.setItem('leave_time', _leaveTime!.toIso8601String());
   }
 
   void _onPageVisible() {
     final leaveTime = _leaveTime ??
-        DateTime.tryParse(html.window.localStorage['leave_time'] ?? '');
+        DateTime.tryParse(web.window.localStorage.getItem('leave_time') ?? '');
     if (leaveTime == null) return;
 
     final awaySeconds = DateTime.now().difference(leaveTime).inSeconds;
@@ -456,7 +459,7 @@ class RCDefaults {
   static const int moodOfflineFloor = 30;
   static const int dailyAdGachaLimit = 3;
   static const int dailyAdMoodLimit = 2;
-  static const int checkpointIntervalSeconds = 15;
+  static const int checkpointIntervalSeconds = 30;
   static const int dailyPetMoodLimit = 3;
   static const int petMoodReward = 3;
   static const int dailyLoginMoodReward = 5;
@@ -579,6 +582,54 @@ service cloud.firestore {
 
 ## 12. Sprint 詳細指令（Claude Code 逐步執行）
 
+### Sprint 0: 美術完成 + 專案準備（Flutter 開發前置）
+
+```
+⚠️ Sprint 0 必須全部完成才能進入 Sprint 1
+```
+
+**Step 0-1: Git 初始化** ✅
+```
+git init + .gitignore（排除 Aseprite 二進制、*.7z、build artifacts）
+初始 commit：現有 spec、sprites、scripts、docs
+```
+
+**Step 0-2: 資產重命名** ✅
+```
+全部 sprites/rat/ 檔案重命名為 rat_base_{state} 格式
+修正 typo（eatting→eating、idel→idle）
+```
+
+**Step 0-3: 補完剩餘動畫**
+```
+用 Aseprite MCP 製作：
+  rat_base_studying.ase（4-6 幀）
+  rat_base_confused.ase（2-3 幀）
+  rat_base_sleeping.ase（2-3 幀）
+確認 idle .ase 原檔存在（rat_base_idle.ase）
+共 8 個動畫狀態全部到位
+```
+
+**Step 0-4: 配件提取 + anchors.json**
+```
+從 items/ 參考圖提取 head/back 配件 → sprites/items/head/ + sprites/items/back/
+建立 sprites/anchors/rat_anchors.json（每幀 head/back 錨點座標）
+```
+
+**Step 0-5: CLAUDE.md 同步更新** ✅
+```
+7 處差異對齊修正（package:web、30秒 checkpoint、freezed、flame_riverpod 等）
+```
+
+**Step 0-6: Sprite sheet 合併 + 驗證 commit**
+```
+所有 .ase 輸出為 sprite sheet PNG（assets/sprites/rat_spritesheet.png）
+GIF 預覽確認每個動畫正常
+commit: "feat: complete pixel art pipeline (Sprint 0)"
+```
+
+---
+
 ### Sprint 1: 專案骨架 + 計時器
 
 **Step 1-1: 專案建立（UI & Mock）**
@@ -598,7 +649,7 @@ service cloud.firestore {
 ```
 建立 TimerController（Riverpod Notifier）。
 實作三種模式計時（25/50/100 分鐘）。
-實作 Web visibilitychange 監聽（dart:html）。
+實作 Web visibilitychange 監聽（package:web，非 dart:html）。
 實作三層 Grace Period（15s/60s/60s+）。
 建立 MockFirestoreRepository。
 寫 TimerController 的 Unit Tests（見 Section 6.2）。
@@ -610,15 +661,17 @@ service cloud.firestore {
 設定 Firebase Web 專案（firebase_core + firebase_auth + cloud_firestore + firebase_remote_config）。
 實作 FirebaseFirestoreRepository。
 實作 Google 登入。
-實作每 15 秒 Firestore checkpoint。
+實作每 30 秒 Firestore checkpoint（見 Section 7 checkpointIntervalSeconds）。
 用真實 Firebase 取代 Mock，端對端驗證。
 ```
 
 ### Sprint 2: Flame 老鼠動畫 + 場景
 
+> 前置條件：Sprint 0 已完成，8 動畫 .ase + spritesheet + anchors.json 全部就緒
+
 **Step 2-1: Flame 基礎（UI & Mock）**
 ```
-建立 PixelRatsGame extends FlameGame。
+建立 PixelRatsGame extends FlameGame（使用 flame_riverpod 套件橋接）。
 載入老鼠 sprite sheet（rat_spritesheet.png）。
 實作 RatComponent，播放 idle 動畫。
 用 hardcode 切換 8 個動畫狀態驗證播放正確。
@@ -681,7 +734,7 @@ Gacha UI（抽取動畫 + 結果展示 + 配件裝備）。
 | 風險 | 應對 |
 |------|------|
 | Flame Web fps < 40 | 立即降 idle 動畫至 4fps + 啟用 SpriteBatch |
-| 瀏覽器殺進程遺失狀態 | 每 15 秒 Firestore checkpoint + localStorage 雙備份 |
+| 瀏覽器殺進程遺失狀態 | 每 30 秒 Firestore checkpoint + localStorage 雙備份 |
 | PWA 「加入主畫面」轉換率低 | 新手引導強調加入主畫面；首次專注完成後彈出提示 |
 | AdSense 申請不過 | 完全不影響 MVP（純免費驗證） |
 | 白噪音 Web Audio 相容性差 | 備選：Howler.js |
