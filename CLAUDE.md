@@ -2,7 +2,23 @@
 
 > ⚠️ **Claude Code 必讀：這是最高優先級文件。所有指令以本檔為準。**
 > 當本檔內容與 Ch1–Ch4 衝突時，以本檔為準。
-> 版本：v1.1（2026/03/13 — 整合四章指令書 + PM 團隊 Review + 差異對齊）
+> 版本：v1.3（2026/03/15 — 美術 pipeline 改為 pre-positioned 圖層疊加，移除 anchors.json）
+
+---
+
+## Current Sprint Status
+
+| Sprint | Step | 狀態 | 說明 |
+|--------|------|------|------|
+| **Sprint 0** | 0-1: Git 初始化 | ✅ Done | .gitignore + initial commit |
+| | 0-2: 資產重命名 | ✅ Done | rat_base_{state} format |
+| | 0-3: 補完剩餘動畫 | ✅ Done | 8 states 全部到位 |
+| | 0-4: 配件製作 | 🔶 In Progress | Devil horns/wings 4/6 states done, idle+confused pending |
+| | 0-5: CLAUDE.md 同步更新 | ✅ Done | v1.2 美術 pipeline 對齊 |
+| | 0-6: Sprite sheet + 驗證 | ⬜ Pending | blocked on 0-4 |
+| **Sprint 1** | 1-1 ~ 1-3 | ⬜ Pending | Flutter 骨架 + 計時器 |
+| **Sprint 2** | 2-1 ~ 2-3 | ⬜ Pending | Flame 動畫 + 場景 |
+| **Sprint 3** | 3-1 ~ 3-3 | ⬜ Pending | Mood + Trust + Gacha |
 
 ---
 
@@ -41,7 +57,7 @@
 ### Must-Have（Sprint 1–3 必須 100% 完成，否則不進 Sprint 4）
 
 1. 專注計時器 + Timestamp Diffing + 三層 Grace Period（Web visibilitychange）
-2. Flame 老鼠 8 狀態動畫 + 3 部位配件錨點系統
+2. Flame 老鼠 8 狀態動畫 + 3 部位配件圖層疊加系統
 3. Mood（0–100，離線底線 30）+ Trust（0–1000，永不衰減）完整計算
 4. Cheese 免費經濟 + Gacha（Trust 分池 + Mood luck 線性公式）
 5. 離線衰減、streak、每 30 秒 Firestore checkpoint、Firestore 安全規則
@@ -133,10 +149,8 @@ lib/
 │   ├── pixel_rats_game.dart
 │   ├── components/
 │   │   ├── rat_component.dart       # 老鼠本體
-│   │   ├── accessory_component.dart # 配件圖層
+│   │   ├── accessory_component.dart # 配件圖層（同座標疊加）
 │   │   └── scene_component.dart     # 場景背景
-│   └── systems/
-│       └── anchor_system.dart       # 錨點解析
 │
 ├── screens/             ← Layer 3: UI 層
 │   ├── home_screen.dart
@@ -472,21 +486,57 @@ class RCDefaults {
 
 ## 8. 美術資產命名規範
 
+### 8.1 美術 Pipeline：Pre-positioned 圖層疊加
+
 ```
-assets/
+⚠️ 配件不使用錨點系統（anchors.json）。
+每個配件的每個動畫狀態都是完整 64x64 canvas，
+配件已在畫布上對齊老鼠位置，渲染時同座標疊加即可。
+
+配件顯示規則：
+- studying、sleeping 狀態不顯示任何配件
+- 其餘 6 個狀態（idle, eating, confused, sad, happy, walking）顯示配件
+```
+
+### 8.2 目錄結構
+
+```
+sprites/
+├── rat/                            # 老鼠本體（.ase 原檔）
+│   ├── rat_base_idle.ase
+│   ├── rat_base_studying.ase
+│   ├── rat_base_eating.ase
+│   ├── rat_base_confused.ase
+│   ├── rat_base_sad.ase
+│   ├── rat_base_happy.ase
+│   ├── rat_base_sleeping.ase
+│   └── rat_base_walking.ase
+│
+├── items/                          # 配件（pre-positioned 64x64）
+│   ├── head/
+│   │   └── devil_horns/            # 資料夾名 = 配件 ID（snake_case）
+│   │       ├── idle.ase
+│   │       ├── eating.ase
+│   │       ├── confused.ase
+│   │       ├── sad.ase
+│   │       ├── happy.ase
+│   │       └── walking.ase
+│   ├── back/
+│   │   └── devil_wings/
+│   │       ├── idle.ase
+│   │       ├── eating.ase
+│   │       ├── confused.ase
+│   │       ├── sad.ase
+│   │       ├── happy.ase
+│   │       └── walking.ase
+│   └── bg/                         # 背景配件（未來）
+│
+assets/                             # Flutter build 用（export 產出）
 ├── sprites/
-│   ├── rat_base_idle_01.png        # 老鼠本體：rat_base_{state}_{frame}
-│   ├── rat_base_idle_02.png
-│   ├── rat_base_studying_01.png
-│   ├── ...
 │   ├── rat_spritesheet.png         # 合併後的 sprite sheet
-│   └── rat_anchors.json            # 錨點座標
-├── items/
-│   ├── item_head_common_cap_01.png     # 配件：item_{slot}_{rarity}_{name}_{id}
-│   ├── item_head_rare_crown_01.png
-│   ├── item_back_epic_wings_01.png
-│   ├── item_bg_legend_galaxy_01.png    # 背景配件
-│   └── items_catalog.json              # 配件目錄
+│   └── items/
+│       ├── head/devil_horns/       # 配件 sprite sheets（per state）
+│       └── back/devil_wings/
 ├── backgrounds/
 │   ├── bg_library.png
 │   ├── bg_cafe.png
@@ -502,14 +552,18 @@ assets/
     └── icon_trust_friend.png
 ```
 
-**規則：**
+### 8.3 命名規則
+
+```
 - 全部小寫、底線分隔
-- 老鼠本體：`rat_base_{state}_{frame}`
-- 配件：`item_{slot}_{rarity}_{name}_{id}`
+- 老鼠本體 .ase：rat_base_{state}.ase
+- 配件資料夾：items/{slot}/{accessory_name}/（snake_case）
+- 配件動畫 .ase：{state}.ase（與老鼠 state 名稱對應）
 - slot: head / back / bg
-- rarity: common / rare / epic / legend
-- 背景場景：`bg_{name}`
-- 音效：`bgm_{scene}_{id}`
+- rarity 不放檔名，由程式端 items_catalog.json 定義
+- 背景場景：bg_{name}
+- 音效：bgm_{scene}_{id}
+```
 
 ---
 
@@ -518,8 +572,7 @@ assets/
 ```
 ⚠️ 重要：老鼠臉頰上的紅色小圓點是「腮紅（blush）」，不是眼睛。
 老鼠的眼睛是黑色的、在頭部上方。
-在處理錨點、配件定位、或擴充美術時，
-「head」配件的錨點基準是頭頂（兩耳之間），不是腮紅位置。
+在擴充美術時，「head」配件的定位基準是頭頂（兩耳之間），不是腮紅位置。
 ```
 
 ---
@@ -600,20 +653,24 @@ git init + .gitignore（排除 Aseprite 二進制、*.7z、build artifacts）
 修正 typo（eatting→eating、idel→idle）
 ```
 
-**Step 0-3: 補完剩餘動畫**
+**Step 0-3: 補完剩餘動畫** ✅
 ```
-用 Aseprite MCP 製作：
-  rat_base_studying.ase（4-6 幀）
-  rat_base_confused.ase（2-3 幀）
-  rat_base_sleeping.ase（2-3 幀）
-確認 idle .ase 原檔存在（rat_base_idle.ase）
-共 8 個動畫狀態全部到位
+8 個動畫狀態全部到位：
+  idle(4), studying(4), eating(4), confused(3),
+  sad(8), happy(4), sleeping(2), walking(3)
 ```
 
-**Step 0-4: 配件提取 + anchors.json**
+**Step 0-4: 配件製作**
 ```
-從 items/ 參考圖提取 head/back 配件 → sprites/items/head/ + sprites/items/back/
-建立 sprites/anchors/rat_anchors.json（每幀 head/back 錨點座標）
+每個配件 = 資料夾，內含 6 個 state 的 .ase（pre-positioned 64x64 canvas）
+⚠️ studying / sleeping 不顯示配件，不需製作
+需要的 states：idle, eating, confused, sad, happy, walking
+
+目前進度：
+  ✅ devil_wings: eating(4f), happy(4f), sad(8f), walking(3f)
+  ✅ devil_horns: eating(4f), happy(4f), sad(8f), walking(4f)
+  ⬜ devil_wings + devil_horns: idle, confused 待補
+  ✅ 資料夾重命名為 snake_case
 ```
 
 **Step 0-5: CLAUDE.md 同步更新** ✅
@@ -667,7 +724,7 @@ commit: "feat: complete pixel art pipeline (Sprint 0)"
 
 ### Sprint 2: Flame 老鼠動畫 + 場景
 
-> 前置條件：Sprint 0 已完成，8 動畫 .ase + spritesheet + anchors.json 全部就緒
+> 前置條件：Sprint 0 已完成，8 動畫 .ase + spritesheet + 配件 .ase 全部就緒
 
 **Step 2-1: Flame 基礎（UI & Mock）**
 ```
@@ -677,13 +734,14 @@ commit: "feat: complete pixel art pipeline (Sprint 0)"
 用 hardcode 切換 8 個動畫狀態驗證播放正確。
 ```
 
-**Step 2-2: 配件錨點系統（State）**
+**Step 2-2: 配件圖層疊加系統（State）**
 ```
-建立 SpriteAnchorParser 類別。
-解析 rat_anchors.json，提取每幀的 head/back 錨點座標。
-建立 AccessoryComponent，根據錨點定位配件 sprite。
+建立 AccessoryComponent，載入配件 sprite sheet。
+配件與老鼠使用相同 64x64 canvas，同座標疊加渲染（無需錨點）。
 實作裝備/卸除配件的邏輯。
-用 Mock 配件資料驗證 3 個部位同時渲染正確。
+實作 state 切換時自動切換對應配件動畫。
+⚠️ studying / sleeping 狀態隱藏所有配件。
+用 Mock 配件資料驗證 head + back 同時渲染正確。
 ```
 
 **Step 2-3: 場景 + 音效（Integration）**
