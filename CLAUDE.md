@@ -2,7 +2,7 @@
 
 > ⚠️ **Claude Code 必讀：這是最高優先級文件。所有指令以本檔為準。**
 > 當本檔內容與 Ch1–Ch4 衝突時，以本檔為準。
-> 版本：v1.3（2026/03/15 — 美術 pipeline 改為 pre-positioned 圖層疊加，移除 anchors.json）
+> 版本：v1.4（2026/03/17 — Sprint 0 完成、Sprint 1 設計定案、PM feedback 整合）
 
 ---
 
@@ -13,10 +13,10 @@
 | **Sprint 0** | 0-1: Git 初始化 | ✅ Done | .gitignore + initial commit |
 | | 0-2: 資產重命名 | ✅ Done | rat_base_{state} format |
 | | 0-3: 補完剩餘動畫 | ✅ Done | 8 states 全部到位 |
-| | 0-4: 配件製作 | 🔶 In Progress | Devil horns/wings 4/6 states done, idle+confused pending |
-| | 0-5: CLAUDE.md 同步更新 | ✅ Done | v1.2 美術 pipeline 對齊 |
-| | 0-6: Sprite sheet + 驗證 | ⬜ Pending | blocked on 0-4 |
-| **Sprint 1** | 1-1 ~ 1-3 | ⬜ Pending | Flutter 骨架 + 計時器 |
+| | 0-4: 配件製作 | ✅ Done | Devil horns/wings 全 6 states 完成 |
+| | 0-5: CLAUDE.md 同步更新 | ✅ Done | v1.4 PM feedback 整合 |
+| | 0-6: Sprite sheet + 驗證 | ✅ Done | 8 rat + 12 accessory sheets + GIF previews + timing tuned |
+| **Sprint 1** | 1-1 ~ 1-3 | ⬜ Pending | Flutter 骨架 + 計時器（設計定案，見 docs/superpowers/specs/） |
 | **Sprint 2** | 2-1 ~ 2-3 | ⬜ Pending | Flame 動畫 + 場景 |
 | **Sprint 3** | 3-1 ~ 3-3 | ⬜ Pending | Mood + Trust + Gacha |
 
@@ -60,7 +60,7 @@
 2. Flame 老鼠 8 狀態動畫 + 3 部位配件圖層疊加系統
 3. Mood（0–100，離線底線 30）+ Trust（0–1000，永不衰減）完整計算
 4. Cheese 免費經濟 + Gacha（Trust 分池 + Mood luck 線性公式）
-5. 離線衰減、streak、每 30 秒 Firestore checkpoint、Firestore 安全規則
+5. 離線衰減、streak、雙層 Checkpoint（localStorage 30s + Firestore 事件驅動/5min）、Firestore 安全規則
 6. i18n 雙語（繁體中文 + 英文）
 7. Firebase Auth（Google 登入）+ Remote Config
 
@@ -209,6 +209,27 @@ class FirebaseFirestoreRepository implements FirestoreRepository { ... }
 class MockFirestoreRepository implements FirestoreRepository { ... }
 ```
 
+### 4.4 Auth Repository 介面（Web3-Ready）
+
+```dart
+// ⚠️ MVP 僅實作 Google Sign-in
+// Phase 2 Solana 錢包登入：Cloud Function 驗證簽名 → createCustomToken → signInWithCustomToken
+// 帳號綁定：linkWithCredential 將 Google + Wallet 綁到同一 Firebase UID
+abstract class AuthRepository {
+  Future<User?> signInWithGoogle();
+  Future<void> signOut();
+  Stream<User?> authStateChanges();
+  // Phase 2: Web3 wallet linking（MVP 不實作）
+  Future<void> linkProvider(AuthCredential credential);
+}
+
+// 真實實作
+class FirebaseAuthRepository implements AuthRepository { ... }
+
+// Mock 實作（開發與測試用）
+class MockAuthRepository implements AuthRepository { ... }
+```
+
 ---
 
 ## 5. 核心公式（精確程式碼，Claude 必須 copy-paste）
@@ -233,10 +254,18 @@ class TimerController {
         _onPageVisible();
       }
     }.toJS);
-    // 每 30 秒自動 checkpoint 到 Firestore（防瀏覽器殺進程）
-    _checkpointTimer = Timer.periodic(
+
+    // ⚠️ 雙層 Checkpoint 策略（PM 要求：降低 Firestore 寫入成本）
+    // Layer 1: localStorage 每 30 秒（零成本，防瀏覽器殺進程）
+    _localCheckpointTimer = Timer.periodic(
       const Duration(seconds: 30),
-      (_) => _saveCheckpoint(),
+      (_) => _saveLocalCheckpoint(),
+    );
+    // Layer 2: Firestore 每 5 分鐘背景同步 + 事件驅動寫入
+    // 事件觸發：session_start, session_complete, session_abandon, grace_period_penalty
+    _cloudSyncTimer = Timer.periodic(
+      const Duration(seconds: 300),
+      (_) => _saveCloudCheckpoint(),
     );
   }
 
@@ -378,6 +407,49 @@ bool shouldShowRareRatPreview(int currentMood) {
 }
 ```
 
+### 5.6 雙層 Checkpoint 策略（PM 決策 2026/03/17）
+
+```
+⚠️ 原始設計為每 30 秒寫 Firestore，成本過高。
+100 分鐘 Flow session = 200 writes → 改為 ~20 writes（降 10 倍）。
+
+Layer 1: localStorage（零成本，防瀏覽器殺進程）
+  → 每 30 秒存一次（localCheckpointSeconds = 30）
+  → 存入：leave_time, session_state, elapsed_seconds
+
+Layer 2: Firestore（付費，需控制寫入量）
+  → 背景同步：每 5 分鐘一次（cloudSyncSeconds = 300）
+  → 事件驅動立即寫入：
+    - session_start（開始計時）
+    - session_complete（計時完成）
+    - session_abandon（主動放棄）
+    - grace_period_penalty（離開超過 60 秒觸發懲罰）
+    - visibility_error（異常狀況）
+
+恢復優先級：Firestore timestamp > localStorage > 全新狀態
+```
+
+### 5.7 專注取消防呆機制（PM 決策 2026/03/17）
+
+```
+⚠️ 50/100 分鐘的心流模式誤觸取消 = 災難級 UX 問題
+
+取消機制分級：
+  Short（25 min）：二次確認 Dialog
+    → "確定要放棄嗎？已專注 XX 分鐘"
+    → 兩個按鈕："繼續專注" / "放棄"
+
+  Deep / Flow（50/100 min）：長按 3 秒解鎖
+    → 取消按鈕位於畫面左上角邊緣（遠離主要操作區）
+    → 長按 3 秒 + 環形進度指示器（類似關機按鈕）
+    → 中途鬆手 = 取消操作，回到專注畫面
+
+部分獎勵規則：
+  → 已完成 >80% 的 session 即使放棄，仍給予比例獎勵
+  → 計算公式：reward * (elapsedSeconds / totalSeconds) * 0.8
+  → 防止使用者因接近完成時的意外中斷而完全失去獎勵
+```
+
 ---
 
 ## 6. 測試驅動開發（TDD）要求
@@ -473,7 +545,8 @@ class RCDefaults {
   static const int moodOfflineFloor = 30;
   static const int dailyAdGachaLimit = 3;
   static const int dailyAdMoodLimit = 2;
-  static const int checkpointIntervalSeconds = 30;
+  static const int localCheckpointSeconds = 30;   // localStorage 本機存檔間隔
+  static const int cloudSyncSeconds = 300;         // Firestore 雲端同步間隔（5分鐘）
   static const int dailyPetMoodLimit = 3;
   static const int petMoodReward = 3;
   static const int dailyLoginMoodReward = 5;
@@ -660,16 +733,15 @@ git init + .gitignore（排除 Aseprite 二進制、*.7z、build artifacts）
   sad(8), happy(4), sleeping(2), walking(3)
 ```
 
-**Step 0-4: 配件製作**
+**Step 0-4: 配件製作** ✅
 ```
 每個配件 = 資料夾，內含 6 個 state 的 .ase（pre-positioned 64x64 canvas）
 ⚠️ studying / sleeping 不顯示配件，不需製作
 需要的 states：idle, eating, confused, sad, happy, walking
 
-目前進度：
-  ✅ devil_wings: eating(4f), happy(4f), sad(8f), walking(3f)
-  ✅ devil_horns: eating(4f), happy(4f), sad(8f), walking(4f)
-  ⬜ devil_wings + devil_horns: idle, confused 待補
+完成：
+  ✅ devil_wings: idle(4f), eating(4f), confused(3f), sad(8f), happy(4f), walking(3f)
+  ✅ devil_horns: idle(4f), eating(4f), confused(3f), sad(8f), happy(4f), walking(4f)
   ✅ 資料夾重命名為 snake_case
 ```
 
@@ -689,37 +761,67 @@ commit: "feat: complete pixel art pipeline (Sprint 0)"
 
 ### Sprint 1: 專案骨架 + 計時器
 
+> 設計文件：`docs/superpowers/specs/2026-03-17-sprint1-flutter-skeleton-timer-design.md`
+
 **Step 1-1: 專案建立（UI & Mock）**
 ```
 建立 Flutter Web 專案 pixelrats。
 設定 pubspec.yaml：
-  dependencies: flame, flutter_riverpod, riverpod_annotation
-  dev_dependencies: riverpod_generator, build_runner, flutter_test
+  dependencies: flame, flutter_riverpod, riverpod_annotation, freezed_annotation,
+                json_annotation, intl
+  dev_dependencies: riverpod_generator, build_runner, freezed, json_serializable, flutter_test
 建立完整資料夾結構（見 Section 4.2）。
+複製 docs/ui-reference/app_theme.dart → lib/utils/app_theme.dart。
 建立 enums.dart（FocusMode、MoodState、TrustLevel、Rarity、RatAnimationState）。
-用 hardcode 資料建立計時器 UI（25/50/100 三個按鈕 + 倒數顯示）。
-實作 i18n 架構（flutter_localizations + ARB），中英文切換可用。
+
+Home Screen（極簡導航，無 Tab Bar）：
+  → 全螢幕 Stack 佈局，mobile-first（9:19.5 aspect ratio on desktop）
+  → 背景：AppColors.bgPrimary 色塊佔位（Flame room 在 Sprint 2）
+  → 中央：靜態老鼠 PNG（assets/sprites/previews/rat_idle.gif）
+  → HUD Overlay（磨砂玻璃面板）：
+    - 左上：🧀 Cheese 1,240（hardcode）
+    - 右上：❤ Mood bar 72% "Happy"（hardcode）
+    - 中上：🔥 Streak 7 + ⭐ Trust "Friend"（hardcode）
+    - 底部：Timer pills（25/50/100 min）+ START 按鈕
+    - 左下：🐭 Profile 按鈕（導向 placeholder）
+    - 右下：⚙ Settings 按鈕（導向 placeholder）
+
+Focus Screen（全螢幕 overlay，從 Home push）：
+  → 大字倒數計時顯示（mm:ss，pixel font）
+  → 當前模式標籤
+  → 取消防呆機制（見 Section 5.7）：
+    - Short：二次確認 Dialog
+    - Deep/Flow：長按 3 秒 + 環形進度指示器
+
+實作 i18n 架構（flutter_localizations + ARB），繁中 + 英文。
 確認 flutter run -d chrome 正常顯示。
+commit: "feat: home screen + focus timer UI with mock data (Sprint 1-1)"
 ```
 
 **Step 1-2: 計時器邏輯（State & Test）**
 ```
-建立 TimerController（Riverpod Notifier）。
+建立 TimerController（Riverpod @riverpod Notifier）。
 實作三種模式計時（25/50/100 分鐘）。
 實作 Web visibilitychange 監聽（package:web，非 dart:html）。
 實作三層 Grace Period（15s/60s/60s+）。
-建立 MockFirestoreRepository。
+實作 localStorage 每 30 秒 checkpoint（見 Section 5.6 Layer 1）。
+建立 MockFirestoreRepository + MockAuthRepository。
 寫 TimerController 的 Unit Tests（見 Section 6.2）。
 所有測試通過後 commit。
+commit: "feat: timer controller + grace period logic + tests (Sprint 1-2)"
 ```
 
 **Step 1-3: Firebase 整合（Integration）**
 ```
 設定 Firebase Web 專案（firebase_core + firebase_auth + cloud_firestore + firebase_remote_config）。
 實作 FirebaseFirestoreRepository。
-實作 Google 登入。
-實作每 30 秒 Firestore checkpoint（見 Section 7 checkpointIntervalSeconds）。
+實作 FirebaseAuthRepository（見 Section 4.4，含 linkProvider 預留）。
+實作 Google 登入 + Auth gate。
+實作雙層 Checkpoint 策略（見 Section 5.6）：
+  → localStorage 每 30 秒（已在 1-2 完成）
+  → Firestore 事件驅動 + 每 5 分鐘背景同步
 用真實 Firebase 取代 Mock，端對端驗證。
+commit: "feat: firebase auth + firestore + remote config integration (Sprint 1-3)"
 ```
 
 ### Sprint 2: Flame 老鼠動畫 + 場景
@@ -792,7 +894,7 @@ Gacha UI（抽取動畫 + 結果展示 + 配件裝備）。
 | 風險 | 應對 |
 |------|------|
 | Flame Web fps < 40 | 立即降 idle 動畫至 4fps + 啟用 SpriteBatch |
-| 瀏覽器殺進程遺失狀態 | 每 30 秒 Firestore checkpoint + localStorage 雙備份 |
+| 瀏覽器殺進程遺失狀態 | 雙層 Checkpoint：localStorage 30s + Firestore 事件驅動/5min（見 Section 5.6） |
 | PWA 「加入主畫面」轉換率低 | 新手引導強調加入主畫面；首次專注完成後彈出提示 |
 | AdSense 申請不過 | 完全不影響 MVP（純免費驗證） |
 | 白噪音 Web Audio 相容性差 | 備選：Howler.js |
@@ -823,6 +925,33 @@ feat: firebase auth + firestore integration (Sprint 1-3)
 flutter analyze        # 零警告
 flutter test           # 所有測試通過
 dart format .          # 格式統一
+```
+
+### 15.1 自動化護欄（Claude Code Hooks & Skills）
+
+```
+⚠️ 以下自動化已配置在 .claude/ 內，開發時自動生效：
+
+PreToolUse Hooks（寫入前攔截）：
+  → .env 檔案保護：阻止編輯任何 .env* 檔案
+  → 禁止模式偵測：dart:html、StateNotifier、ChangeNotifier
+    寫入 .dart 檔案時自動攔截，強制使用 package:web + @riverpod Notifier
+
+PostToolUse Hook（寫入後自動執行）：
+  → Dart 自動格式化：每次編輯 .dart 檔案後自動執行 dart format
+
+Skills：
+  → /pre-commit：一鍵執行 Section 15 全部品質檢查 + Mock-First 合規驗證
+  → /sprint-step：開始任何 Sprint 步驟前調用，強制 UI→State→Integration 順序
+
+Agents：
+  → flutter-arch-reviewer：Sprint 步驟完成後審查三層架構合規性
+  → test-runner：編輯 controllers/ 後自動跑對應 Unit Test
+  → sprite-qa：修改 .ase 檔案後驗證美術規格
+
+MCP Servers：
+  → aseprite（pixel-plugin）：Aseprite 操作
+  → context7：Flutter / Flame / Riverpod / Firebase 即時文件查詢
 ```
 
 ---
