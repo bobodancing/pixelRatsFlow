@@ -3,9 +3,18 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'app.dart';
+import 'repositories/auth_repository.dart';
+import 'repositories/firebase_auth_repository.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const ProviderScope(child: PixelRatsApp()));
+  runApp(
+    ProviderScope(
+      overrides: [
+        authRepositoryProvider.overrideWithValue(FirebaseAuthRepository()),
+      ],
+      child: const PixelRatsApp(),
+    ),
+  );
 }

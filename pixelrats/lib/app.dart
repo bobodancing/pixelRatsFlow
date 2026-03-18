@@ -1,24 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pixelrats/l10n/app_localizations.dart';
-import 'repositories/firebase_auth_repository.dart';
 import 'repositories/auth_repository.dart';
 import 'utils/app_theme.dart';
 import 'screens/home_screen.dart';
 import 'screens/sign_in_screen.dart';
 
-class PixelRatsApp extends StatefulWidget {
+class PixelRatsApp extends ConsumerWidget {
   const PixelRatsApp({super.key});
 
   @override
-  State<PixelRatsApp> createState() => _PixelRatsAppState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final authRepo = ref.watch(authRepositoryProvider);
 
-class _PixelRatsAppState extends State<PixelRatsApp> {
-  final FirebaseAuthRepository _authRepo = FirebaseAuthRepository();
-
-  @override
-  Widget build(BuildContext context) {
     return MaterialApp(
       title: 'PixelRats',
       debugShowCheckedModeBanner: false,
@@ -30,7 +25,6 @@ class _PixelRatsAppState extends State<PixelRatsApp> {
         ),
         useMaterial3: true,
       ),
-      locale: const Locale('zh', 'TW'),
       localizationsDelegates: const [
         AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
@@ -39,7 +33,7 @@ class _PixelRatsAppState extends State<PixelRatsApp> {
       ],
       supportedLocales: const [Locale('en'), Locale('zh', 'TW')],
       home: StreamBuilder<AuthUser?>(
-        stream: _authRepo.authStateChanges(),
+        stream: authRepo.authStateChanges(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
@@ -52,7 +46,7 @@ class _PixelRatsAppState extends State<PixelRatsApp> {
           if (snapshot.hasData && snapshot.data != null) {
             return const HomeScreen();
           }
-          return SignInScreen(onSignIn: () => _authRepo.signInWithGoogle());
+          return SignInScreen(onSignIn: () => authRepo.signInWithGoogle());
         },
       ),
     );

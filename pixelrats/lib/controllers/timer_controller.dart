@@ -178,7 +178,8 @@ class TimerLogic {
 }
 
 /// Riverpod Notifier wrapping TimerLogic.
-@riverpod
+/// keepAlive prevents state loss when navigating away from FocusScreen.
+@Riverpod(keepAlive: true)
 class TimerController extends _$TimerController {
   final TimerLogic _logic = TimerLogic();
 

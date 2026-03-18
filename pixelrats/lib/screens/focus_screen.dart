@@ -5,6 +5,8 @@ import 'package:pixelrats/l10n/app_localizations.dart';
 import '../controllers/timer_controller.dart';
 import '../models/enums.dart';
 import '../utils/app_theme.dart';
+import '../utils/constants.dart';
+import '../utils/web_visibility.dart' as web_vis;
 import '../widgets/long_press_cancel_button.dart';
 
 class FocusScreen extends ConsumerStatefulWidget {
@@ -18,22 +20,88 @@ class FocusScreen extends ConsumerStatefulWidget {
 
 class _FocusScreenState extends ConsumerState<FocusScreen> {
   Timer? _tickTimer;
+  Timer? _localCheckpointTimer;
+  DateTime? _leaveTime;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(timerControllerProvider.notifier).start(widget.mode);
-      _tickTimer = Timer.periodic(
-        const Duration(seconds: 1),
-        (_) => ref.read(timerControllerProvider.notifier).tick(),
+      _tickTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) return;
+        ref.read(timerControllerProvider.notifier).tick();
+      });
+
+      // localStorage checkpoint every 30 seconds
+      _localCheckpointTimer = Timer.periodic(
+        const Duration(seconds: RCDefaults.localCheckpointSeconds),
+        (_) => _saveLocalCheckpoint(),
       );
+
+      // Recover from any stored leave time (browser kill recovery)
+      _recoverFromLocalStorage();
+
+      // Wire up visibilitychange listener
+      web_vis.addVisibilityListener(_onVisibilityChange);
     });
+  }
+
+  void _onVisibilityChange(bool isHidden) {
+    if (!mounted) return;
+    if (isHidden) {
+      _leaveTime = DateTime.now();
+      web_vis.saveToLocalStorage('leave_time', _leaveTime!.toIso8601String());
+      ref.read(timerControllerProvider.notifier).handleLeave();
+    } else {
+      final leaveTime = _leaveTime ?? _parseStoredLeaveTime();
+      if (leaveTime == null) return;
+
+      final awaySeconds = DateTime.now().difference(leaveTime).inSeconds;
+      ref
+          .read(timerControllerProvider.notifier)
+          .handleReturn(awaySeconds: awaySeconds);
+      _leaveTime = null;
+      web_vis.removeFromLocalStorage('leave_time');
+    }
+  }
+
+  DateTime? _parseStoredLeaveTime() {
+    final stored = web_vis.readFromLocalStorage('leave_time');
+    if (stored == null) return null;
+    return DateTime.tryParse(stored);
+  }
+
+  void _recoverFromLocalStorage() {
+    final storedLeaveTime = _parseStoredLeaveTime();
+    if (storedLeaveTime == null) return;
+
+    final awaySeconds = DateTime.now().difference(storedLeaveTime).inSeconds;
+    ref
+        .read(timerControllerProvider.notifier)
+        .handleReturnFromStoredLeaveTime(awaySeconds: awaySeconds);
+    web_vis.removeFromLocalStorage('leave_time');
+  }
+
+  void _saveLocalCheckpoint() {
+    if (!mounted) return;
+    final timerState = ref.read(timerControllerProvider);
+    web_vis.saveToLocalStorage('session_mode', widget.mode.name);
+    web_vis.saveToLocalStorage(
+      'elapsed_seconds',
+      timerState.elapsedSeconds.toString(),
+    );
   }
 
   @override
   void dispose() {
     _tickTimer?.cancel();
+    _localCheckpointTimer?.cancel();
+    web_vis.removeVisibilityListener();
+    // Clean up localStorage session data on normal exit
+    web_vis.removeFromLocalStorage('leave_time');
+    web_vis.removeFromLocalStorage('session_mode');
+    web_vis.removeFromLocalStorage('elapsed_seconds');
     super.dispose();
   }
 
