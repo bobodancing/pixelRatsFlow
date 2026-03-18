@@ -1,93 +1,81 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pixelrats/l10n/app_localizations.dart';
+import '../controllers/timer_controller.dart';
 import '../models/enums.dart';
 import '../utils/app_theme.dart';
-import '../utils/constants.dart';
 import '../widgets/long_press_cancel_button.dart';
 
-class FocusScreen extends StatefulWidget {
+class FocusScreen extends ConsumerStatefulWidget {
   const FocusScreen({super.key, required this.mode});
 
   final FocusMode mode;
 
   @override
-  State<FocusScreen> createState() => _FocusScreenState();
+  ConsumerState<FocusScreen> createState() => _FocusScreenState();
 }
 
-class _FocusScreenState extends State<FocusScreen> {
-  late int _remainingSeconds;
-  late int _totalSeconds;
-  Timer? _timer;
-  bool _isComplete = false;
+class _FocusScreenState extends ConsumerState<FocusScreen> {
+  Timer? _tickTimer;
 
   @override
   void initState() {
     super.initState();
-    _totalSeconds = _getDurationMinutes(widget.mode) * 60;
-    _remainingSeconds = _totalSeconds;
-    _startTimer();
-  }
-
-  int _getDurationMinutes(FocusMode mode) => switch (mode) {
-    FocusMode.short => RCDefaults.shortMinutes,
-    FocusMode.deep => RCDefaults.deepMinutes,
-    FocusMode.flow => RCDefaults.flowMinutes,
-  };
-
-  void _startTimer() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() {
-        if (_remainingSeconds > 0) {
-          _remainingSeconds--;
-        } else {
-          _timer?.cancel();
-          _isComplete = true;
-        }
-      });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(timerControllerProvider.notifier).start(widget.mode);
+      _tickTimer = Timer.periodic(
+        const Duration(seconds: 1),
+        (_) => ref.read(timerControllerProvider.notifier).tick(),
+      );
     });
   }
 
-  void _handleCancel() {
-    final l10n = AppLocalizations.of(context)!;
-    final elapsedMinutes = (_totalSeconds - _remainingSeconds) ~/ 60;
+  @override
+  void dispose() {
+    _tickTimer?.cancel();
+    super.dispose();
+  }
 
-    if (widget.mode == FocusMode.short) {
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: AppColors.bgCard,
-          title: Text(
-            l10n.cancelConfirmTitle,
-            style: const TextStyle(color: AppColors.textCream),
-          ),
-          content: Text(
-            l10n.cancelConfirmMessage(elapsedMinutes),
-            style: const TextStyle(color: AppColors.textLavender),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text(
-                l10n.cancelConfirmKeep,
-                style: const TextStyle(color: AppColors.purple),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(ctx);
-                Navigator.pop(context);
-              },
-              child: Text(
-                l10n.cancelConfirmQuit,
-                style: const TextStyle(color: AppColors.moodCoral),
-              ),
-            ),
-          ],
+  void _handleShortCancel() {
+    final l10n = AppLocalizations.of(context)!;
+    final timerState = ref.read(timerControllerProvider);
+    final elapsedMinutes = timerState.elapsedSeconds ~/ 60;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bgCard,
+        title: Text(
+          l10n.cancelConfirmTitle,
+          style: const TextStyle(color: AppColors.textCream),
         ),
-      );
-    }
+        content: Text(
+          l10n.cancelConfirmMessage(elapsedMinutes),
+          style: const TextStyle(color: AppColors.textLavender),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(
+              l10n.cancelConfirmKeep,
+              style: const TextStyle(color: AppColors.purple),
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              ref.read(timerControllerProvider.notifier).cancel();
+              Navigator.pop(ctx);
+              Navigator.pop(context);
+            },
+            child: Text(
+              l10n.cancelConfirmQuit,
+              style: const TextStyle(color: AppColors.moodCoral),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   String _formatTime(int seconds) {
@@ -109,16 +97,11 @@ class _FocusScreenState extends State<FocusScreen> {
   };
 
   @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context)!;
+    final timerState = ref.watch(timerControllerProvider);
 
-    if (_isComplete) {
+    if (timerState.isComplete) {
       return Scaffold(
         backgroundColor: AppColors.bgDark,
         body: Center(
@@ -149,12 +132,15 @@ class _FocusScreenState extends State<FocusScreen> {
               child: widget.mode == FocusMode.short
                   ? IconButton(
                       icon: const Icon(Icons.close, color: AppColors.textCream),
-                      onPressed: _handleCancel,
+                      onPressed: _handleShortCancel,
                     )
                   : LongPressCancelButton(
                       holdDuration: const Duration(seconds: 3),
                       label: l10n.cancelHoldToCancel,
-                      onCancelled: () => Navigator.pop(context),
+                      onCancelled: () {
+                        ref.read(timerControllerProvider.notifier).cancel();
+                        Navigator.pop(context);
+                      },
                     ),
             ),
             Center(
@@ -170,7 +156,7 @@ class _FocusScreenState extends State<FocusScreen> {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    _formatTime(_remainingSeconds),
+                    _formatTime(timerState.remainingSeconds),
                     style: AppTypography.splashTitle.copyWith(fontSize: 48),
                   ),
                   const SizedBox(height: 48),
