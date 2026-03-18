@@ -53,20 +53,35 @@ class _LongPressCancelButtonState extends State<LongPressCancelButton>
       child: AnimatedBuilder(
         animation: _controller,
         builder: (context, child) {
-          return Stack(
-            alignment: Alignment.center,
+          return Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              SizedBox(
-                width: 48,
-                height: 48,
-                child: CircularProgressIndicator(
-                  value: _controller.value,
-                  strokeWidth: 3,
-                  valueColor: const AlwaysStoppedAnimation(AppColors.moodCoral),
-                  backgroundColor: AppColors.bgCard,
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  SizedBox(
+                    width: 48,
+                    height: 48,
+                    child: CircularProgressIndicator(
+                      value: _controller.value,
+                      strokeWidth: 3,
+                      valueColor: const AlwaysStoppedAnimation(
+                        AppColors.moodCoral,
+                      ),
+                      backgroundColor: AppColors.bgCard,
+                    ),
+                  ),
+                  const Icon(Icons.close, color: AppColors.textCream, size: 20),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(
+                widget.label,
+                style: const TextStyle(
+                  color: AppColors.textLavender,
+                  fontSize: 10,
                 ),
               ),
-              const Icon(Icons.close, color: AppColors.textCream, size: 20),
             ],
           );
         },
