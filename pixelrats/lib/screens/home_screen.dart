@@ -119,37 +119,42 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  TimerPill(
-                                    label: l10n.focusModeShort,
-                                    mode: FocusMode.short,
-                                    isSelected:
-                                        _selectedMode == FocusMode.short,
-                                    onTap: () => setState(
-                                      () => _selectedMode = FocusMode.short,
+                              SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    TimerPill(
+                                      label: l10n.focusModeShort,
+                                      mode: FocusMode.short,
+                                      isSelected:
+                                          _selectedMode == FocusMode.short,
+                                      onTap: () => setState(
+                                        () => _selectedMode = FocusMode.short,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  TimerPill(
-                                    label: l10n.focusModeDeep,
-                                    mode: FocusMode.deep,
-                                    isSelected: _selectedMode == FocusMode.deep,
-                                    onTap: () => setState(
-                                      () => _selectedMode = FocusMode.deep,
+                                    const SizedBox(width: 8),
+                                    TimerPill(
+                                      label: l10n.focusModeDeep,
+                                      mode: FocusMode.deep,
+                                      isSelected:
+                                          _selectedMode == FocusMode.deep,
+                                      onTap: () => setState(
+                                        () => _selectedMode = FocusMode.deep,
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  TimerPill(
-                                    label: l10n.focusModeFlow,
-                                    mode: FocusMode.flow,
-                                    isSelected: _selectedMode == FocusMode.flow,
-                                    onTap: () => setState(
-                                      () => _selectedMode = FocusMode.flow,
+                                    const SizedBox(width: 8),
+                                    TimerPill(
+                                      label: l10n.focusModeFlow,
+                                      mode: FocusMode.flow,
+                                      isSelected:
+                                          _selectedMode == FocusMode.flow,
+                                      onTap: () => setState(
+                                        () => _selectedMode = FocusMode.flow,
+                                      ),
                                     ),
-                                  ),
-                                ],
+                                  ],
+                                ),
                               ),
                               const SizedBox(height: 12),
                               SizedBox(
