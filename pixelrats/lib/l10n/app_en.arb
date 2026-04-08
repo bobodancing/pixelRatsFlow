@@ -1,0 +1,156 @@
+{
+  "@@locale": "en",
+  "appTitle": "PixelRats",
+  "@appTitle": {
+    "description": "The application title"
+  },
+  "cheeseLabel": "Cheese",
+  "@cheeseLabel": {
+    "description": "Label for the cheese currency"
+  },
+  "moodLabel": "Mood",
+  "@moodLabel": {
+    "description": "Label for the mood stat"
+  },
+  "trustLabel": "Trust",
+  "@trustLabel": {
+    "description": "Label for the trust stat"
+  },
+  "streakLabel": "Streak",
+  "@streakLabel": {
+    "description": "Label for the daily streak counter"
+  },
+  "profileButton": "Profile",
+  "@profileButton": {
+    "description": "Profile navigation button label"
+  },
+  "settingsButton": "Settings",
+  "@settingsButton": {
+    "description": "Settings navigation button label"
+  },
+  "startButton": "Start",
+  "@startButton": {
+    "description": "Start focus session button label"
+  },
+  "okButton": "OK",
+  "@okButton": {
+    "description": "Generic OK button label"
+  },
+  "focusModeShort": "25 min",
+  "@focusModeShort": {
+    "description": "Short focus mode duration label"
+  },
+  "focusModeDeep": "50 min",
+  "@focusModeDeep": {
+    "description": "Deep focus mode duration label"
+  },
+  "focusModeFlow": "100 min",
+  "@focusModeFlow": {
+    "description": "Flow focus mode duration label"
+  },
+  "focusModeShortLabel": "Short Focus",
+  "@focusModeShortLabel": {
+    "description": "Short focus mode name"
+  },
+  "focusModeDeepLabel": "Deep Focus",
+  "@focusModeDeepLabel": {
+    "description": "Deep focus mode name"
+  },
+  "focusModeFlowLabel": "Flow",
+  "@focusModeFlowLabel": {
+    "description": "Flow focus mode name"
+  },
+  "focusScreenTitle": "{mode} — {duration}",
+  "@focusScreenTitle": {
+    "description": "Focus screen title showing mode and duration",
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "duration": {
+        "type": "String"
+      }
+    }
+  },
+  "cancelConfirmTitle": "Abandon session?",
+  "@cancelConfirmTitle": {
+    "description": "Title of the cancel confirmation dialog"
+  },
+  "cancelConfirmMessage": "You've been focused for {minutes} minutes. Are you sure you want to quit?",
+  "@cancelConfirmMessage": {
+    "description": "Body of the cancel confirmation dialog",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "cancelConfirmKeep": "Keep focusing",
+  "@cancelConfirmKeep": {
+    "description": "Button to dismiss cancel dialog and continue focusing"
+  },
+  "cancelConfirmQuit": "Quit",
+  "@cancelConfirmQuit": {
+    "description": "Button to confirm quitting the focus session"
+  },
+  "cancelHoldToCancel": "Hold to cancel",
+  "@cancelHoldToCancel": {
+    "description": "Instruction label for long-press cancel button on Deep/Flow modes"
+  },
+  "sessionComplete": "Session complete!",
+  "@sessionComplete": {
+    "description": "Message shown when a focus session is completed"
+  },
+  "signInWithGoogle": "Sign in with Google",
+  "@signInWithGoogle": {
+    "description": "Google sign-in button label"
+  },
+  "moodStateSad": "Sad",
+  "@moodStateSad": {
+    "description": "Mood state: sad"
+  },
+  "moodStateBored": "Bored",
+  "@moodStateBored": {
+    "description": "Mood state: bored"
+  },
+  "moodStateNeutral": "Neutral",
+  "@moodStateNeutral": {
+    "description": "Mood state: neutral"
+  },
+  "moodStateHappy": "Happy",
+  "@moodStateHappy": {
+    "description": "Mood state: happy"
+  },
+  "moodStateEcstatic": "Ecstatic",
+  "@moodStateEcstatic": {
+    "description": "Mood state: ecstatic"
+  },
+  "trustLevelStranger": "Stranger",
+  "@trustLevelStranger": {
+    "description": "Trust level: stranger"
+  },
+  "trustLevelFriend": "Friend",
+  "@trustLevelFriend": {
+    "description": "Trust level: friend"
+  },
+  "trustLevelPartner": "Partner",
+  "@trustLevelPartner": {
+    "description": "Trust level: partner"
+  },
+  "trustLevelFamily": "Family",
+  "@trustLevelFamily": {
+    "description": "Trust level: family"
+  },
+  "trustLevelSoulBond": "Soul Bond",
+  "@trustLevelSoulBond": {
+    "description": "Trust level: soul bond (highest)"
+  },
+  "placeholderScreen": "Coming Soon",
+  "@placeholderScreen": {
+    "description": "Placeholder text for screens not yet implemented"
+  },
+  "daysSuffix": "days",
+  "@daysSuffix": {
+    "description": "Suffix for day count (e.g. '7 days')"
+  }
+}

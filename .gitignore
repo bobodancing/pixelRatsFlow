@@ -37,3 +37,7 @@ desktop.ini
 
 # Claude internal
 .claude/
+.superpowers/
+
+# Node modules (UIUX mockups)
+node_modules/
